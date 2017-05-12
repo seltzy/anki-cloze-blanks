@@ -45,7 +45,8 @@ def unhideClozeTextForSelectedCards(browser):
 
 def processClozedText(text):
     # Only update clozes that do not already have hint text.
-    regex = r"{{c(\d+)::(([^:]+?)(::[^}]*?)?)}}"
+    # NOTE: Watch out for recursive cloze replacement
+    regex = r"{{c(\d+)::(([^:{}]+?)(::[^:{}]*?)?)}}"
     return re.subn(regex, _unhideClozeTextMatch, text)
 
 def _unhideClozeTextInField(note, text):
