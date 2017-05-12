@@ -53,7 +53,7 @@ def _unhideClozeTextInField(note, text):
     newText, num = processClozedText(text)
     return newText
 
-def updateClozeText(modifiedOrNot, note, currentField):
+def updateClozeTextOnNoteField(note, currentField):
     original = note.fields[currentField]
     if note.hasTag("uncloze"):
         newText = _unhideClozeTextInField(note, original)
@@ -62,7 +62,28 @@ def updateClozeText(modifiedOrNot, note, currentField):
             # logging.debug('Changed field from "'+unicode(original)+'" to "'+unicode(note.fields[currentField])+'"')
             return newText
 
-addHook("editFocusLost", updateClozeText)
+def updateClozeTextFocusLost(modifiedOrNot, note, currentField):
+    return updateClozeTextOnNoteField(note, currentField)
+
+def updateClozeTextFocusGained(note, currentField):
+    return updateClozeTextOnNoteField(note, currentField)
+
+def updateClozeTextOnNote(note):
+    text_fields = set(note.keys()).intersection(TEXT_FIELDS_SET)
+    for field in text_fields:
+        updateClozeTextOnNoteField(note, field)
+
+def updateClozeTextTagsUpdated(note):
+    return updateClozeTextOnNote(note)
+
+def updateClozeTextNoteChanged(nid):
+    note = mw.col.getNote(nid)
+    updateClozeTextOnNote(note)
+
+addHook("editFocusGained", updateClozeTextFocusGained)
+addHook("editFocusLost", updateClozeTextFocusLost)
+addHook("noteChanged", updateClozeTextNoteChanged)
+# addHook("tagsUpdated", updateClozeTextTagsUpdated)
 
 def unhideClozeTextForExistingCards():
     _forExistingCards(u"Unhide cloze text for ALL cloze cards?", _unhideClozeTextInNotes)
