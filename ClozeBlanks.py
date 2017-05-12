@@ -58,8 +58,11 @@ def _unhideClozeTextInField(note, text):
 def updateClozeText(modifiedOrNot, note, currentField):
     original = note.fields[currentField]
     if note.hasTag("uncloze"):
-        note.fields[currentField] = _unhideClozeTextInField(note, original)
-    # logging.debug('Changed field from "'+unicode(original)+'" to "'+unicode(note.fields[currentField])+'"')
+        newText = _unhideClozeTextInField(note, original)
+        if (note.fields[currentField] != newText):
+            note.fields[currentField] = newText
+            # logging.debug('Changed field from "'+unicode(original)+'" to "'+unicode(note.fields[currentField])+'"')
+            return newText
 
 addHook("editFocusLost", updateClozeText)
 
