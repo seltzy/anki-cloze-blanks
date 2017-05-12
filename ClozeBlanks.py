@@ -24,6 +24,7 @@ FEATURES = {
 }
 
 BLANK = "_"
+CARD_NAMES_SET = ["Cloze", "Epic Sentence"]
 TEXT_FIELDS_SET = ["Text", "Sentence", "Front"]
 
 ADD_BLANKS_MENU_TEXT = _(u"Add blanks to cloze notes")
@@ -33,12 +34,10 @@ CLOZE_WORDS_MENU_TEXT = _(u"Make each word into a cloze")
 def _forExistingCards(prompt, funcForExistingCards):
     if not askUser(_(prompt)):
         return
-    cloze = mw.col.models.byName("Cloze")
-    nids = mw.col.models.nids(cloze)
-    funcForExistingCards(nids)
-    sentence = mw.col.models.byName("Epic Sentence")
-    nids = mw.col.models.nids(sentence)
-    funcForExistingCards(nids)
+    for name in CARD_NAMES_SET:
+        model = mw.col.models.byName(name);
+        nids = mw.col.models.nids(model)
+        funcForExistingCards(nids)
 
 def unhideClozeTextForSelectedCards(browser):
     nids = browser.selectedNotes()
