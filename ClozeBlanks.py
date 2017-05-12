@@ -10,17 +10,16 @@ from PyQt4.QtCore import SIGNAL
 from PyQt4.QtGui import QAction, QProgressDialog
 
 from anki.hooks import addHook, wrap
+from anki.utils import stripHTML
 from aqt import mw
 from aqt.editor import Editor
 from aqt.utils import askUser, showInfo
 
 FEATURES = {
-    "clozeEachWord" : True,
     "unhideCloze" : True,
     "forNewCards" : False, # TODO: not yet implemented
     "forExistingCards" : True,
     "forSelectedCards" : True,
-    "includeFirstLetter" : False,
     "nonBreakingSpaces" : True,
 }
 
@@ -31,44 +30,44 @@ ADD_BLANKS_MENU_TEXT = _(u"Add blanks to cloze notes")
 UNHIDE_CLOZE_MENU_TEXT = _(u"Unhide clozed text in cloze notes")
 CLOZE_WORDS_MENU_TEXT = _(u"Make each word into a cloze")
 
-def addClozeBlanksToNewCards(self):
-    pass
-
-def addClozeBlanksToSelectedCards(browser):
-    nids = browser.selectedNotes()
-    _addClozeBlanksToNotes(nids)
-
-def clozeEachWordForSelectedCards(browser):
-    nids = browser.selectedNotes()
-    _clozeEachWord(nids)
-
-def unhideClozeTextForSelectedCards(browser):
-    nids = browser.selectedNotes()
-    _unhideClozeTextInNotes(nids)
-
-def addClozeBlanksToExistingCards():
-    _forExistingCards(u"Add blanks to ALL cloze cards?", _addClozeBlanksToNotes)
-
-def clozeEachWordForExistingCards():
-    _forExistingCards(u"Make each word into a cloze for ALL cards?", _clozeEachWord)
-
-def unhideClozeTextForExistingCards():
-    _forExistingCards(u"Unhide cloze text for ALL cloze cards?", _unhideClozeTextInNotes)
-
 def _forExistingCards(prompt, funcForExistingCards):
     if not askUser(_(prompt)):
         return
     cloze = mw.col.models.byName("Cloze")
     nids = mw.col.models.nids(cloze)
     funcForExistingCards(nids)
+    sentence = mw.col.models.byName("Epic Sentence")
+    nids = mw.col.models.nids(sentence)
+    funcForExistingCards(nids)
+
+def unhideClozeTextForSelectedCards(browser):
+    nids = browser.selectedNotes()
+    _unhideClozeTextInNotes(nids)
+
+def processClozedText(text):
+    # Only update clozes that do not already have hint text.
+    regex = r"{{c(\d+)::(([^:]+?)(::[^}]+?)?)}}"
+    return re.subn(regex, _unhideClozeTextMatch, text)
+
+def _unhideClozeTextInField(note, text):
+    # Strip HTML styling first
+    text = stripHTML(text)
+    newText, num = processClozedText(text)
+    return newText
+
+def updateClozeText(modifiedOrNot, note, currentField):
+    original = note.fields[currentField]
+    if note.hasTag("uncloze"):
+        note.fields[currentField] = _unhideClozeTextInField(note, original)
+    # logging.debug('Changed field from "'+unicode(original)+'" to "'+unicode(note.fields[currentField])+'"')
+
+addHook("editFocusLost", updateClozeText)
+
+def unhideClozeTextForExistingCards():
+    _forExistingCards(u"Unhide cloze text for ALL cloze cards?", _unhideClozeTextInNotes)
 
 def _unhideClozeTextInNotes(nids):
-    def process(text):
-        # Only update clozes that do not already have hint text.
-        regex = r"{{c(\d+)::(([^:]+?)(::[^}]+?)?)}}"
-        return re.subn(regex, _unhideClozeTextMatch, text)
-
-    _updateExistingCards(UNHIDE_CLOZE_MENU_TEXT, nids, process)
+    _updateExistingCards(UNHIDE_CLOZE_MENU_TEXT, nids, processClozedText)
 
 def _unhideClozeTextMatch(match):
     num = match.group(1)
@@ -78,45 +77,6 @@ def _unhideClozeTextMatch(match):
 def _unhideClozeText(num, text):
     # Need to escape curly-braces.
     return u"{{{{c{0}::{1}::{2}}}}}".format(num, text, text)
-
-def _addClozeBlanksToNotes(nids):
-    def process(text):
-        # Only update clozes that do not already have hint text.
-        regex = r"{{c(\d+)::(([^:]+?)(::[ " + re.escape(BLANK) + r" ]+?)?)}}"
-        return re.subn(regex, _addClozeBlanksToTextMatch, text)
-
-    _updateExistingCards(ADD_BLANKS_MENU_TEXT, nids, process)
-
-def _addClozeBlanksToTextMatch(match):
-    num = match.group(1)
-    text = match.group(3)
-    return _addClozeBlanksToText(num, text)
-
-def _addClozeBlanksToText(num, text):
-    words = text.split(" ")
-    space = u"\u00a0" if FEATURES["nonBreakingSpaces"] else " "
-
-    if FEATURES["includeFirstLetter"]:
-        blanks = space.join([word[0] + (BLANK * max(1, len(word)/2)) for word in words])
-    else:
-        blanks = space.join([BLANK * max(1, len(word)/2) for word in words])
-
-    # Need to escape curly-braces.
-    return u"{{{{c{0}::{1}::{2}}}}}".format(num, text, blanks)
-
-def _clozeEachWord(nids):
-    def process(text):
-        newText = text
-        num = 0
-        if not re.search(r"{{c\d+::.+?}}", text):
-            clozes = []
-            for ndx, word in enumerate(text.split(" ")):
-                clozes.append(_addClozeBlanksToText(ndx + 1, word))
-            newText = " ".join(clozes)
-            num = len(clozes)
-        return newText, num
-
-    _updateExistingCards(CLOZE_WORDS_MENU_TEXT, nids, process)
 
 def _updateExistingCards(checkpoint, nids, processFunc):
     updatedCount = 0
@@ -148,24 +108,13 @@ def _updateExistingCards(checkpoint, nids, processFunc):
 
 
 def _setupBrowserMenu(browser):
-    addBlanks = QAction(ADD_BLANKS_MENU_TEXT, browser)
-    browser.connect(addBlanks, SIGNAL("triggered()"),
-        lambda b = browser: addClozeBlanksToSelectedCards(b))
-
     unhideCloze = QAction(UNHIDE_CLOZE_MENU_TEXT, browser)
     browser.connect(unhideCloze, SIGNAL("triggered()"),
         lambda b = browser: unhideClozeTextForSelectedCards(b))
 
-    clozeWords = QAction(CLOZE_WORDS_MENU_TEXT, browser)
-    browser.connect(clozeWords, SIGNAL("triggered()"),
-        lambda b = browser: clozeEachWordForSelectedCards(b))
-
     browser.form.menuEdit.addSeparator()
-    browser.form.menuEdit.addAction(addBlanks)
     if FEATURES["unhideCloze"]:
         browser.form.menuEdit.addAction(unhideCloze)
-    if FEATURES["clozeEachWord"]:
-        browser.form.menuEdit.addAction(clozeWords)
 
 
 if FEATURES["forNewCards"]:
@@ -173,21 +122,12 @@ if FEATURES["forNewCards"]:
     # TODO: support making each word into a cloze
 
 if FEATURES["forExistingCards"]:
-    addBlanks = QAction(ADD_BLANKS_MENU_TEXT, mw)
-    mw.connect(addBlanks, SIGNAL("triggered()"), addClozeBlanksToExistingCards)
-
     unhideCloze = QAction(UNHIDE_CLOZE_MENU_TEXT, mw)
     mw.connect(unhideCloze, SIGNAL("triggered()"), unhideClozeTextForExistingCards)
 
-    clozeWords = QAction(CLOZE_WORDS_MENU_TEXT, mw)
-    mw.connect(clozeWords, SIGNAL("triggered()"), clozeEachWordForExistingCards)
-
     mw.form.menuTools.addSeparator()
-    mw.form.menuTools.addAction(addBlanks)
     if FEATURES["unhideCloze"]:
         mw.form.menuTools.addAction(unhideCloze)
-    if FEATURES["clozeEachWord"]:
-        mw.form.menuTools.addAction(clozeWords)
 
 if FEATURES["forSelectedCards"]:
     addHook("browser.setupMenus", _setupBrowserMenu)
