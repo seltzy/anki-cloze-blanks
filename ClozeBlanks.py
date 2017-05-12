@@ -50,12 +50,6 @@ def processClozedText(text):
     return re.subn(regex, _unhideClozeTextMatch, text)
 
 def _unhideClozeTextInField(note, text):
-    # text = re.sub("<br>", "___newline___", text)
-    # text = re.sub("<br />", "___newline___", text)
-    # text = re.sub("\n", "___newline___", text)
-    # Strip HTML styling first
-    # text = stripHTML(text)
-    # text = re.sub("___newline___", "\n", text)
     newText, num = processClozedText(text)
     return newText
 
